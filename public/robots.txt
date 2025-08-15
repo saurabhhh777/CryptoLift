@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://token-launch-pad.vercel.app/sitemap.xml 
