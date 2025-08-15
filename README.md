@@ -1,9 +1,9 @@
-# TokenLaunchPad 🚀
+# CryptoLift 🚀
 
-TokenLaunchPad is a decentralized platform that allows users to create, manage, and launch their own tokens effortlessly. This platform simplifies the process of token creation, fundraising, and distribution, making it accessible for everyone.
+CryptoLift is a decentralized platform that allows users to create, manage, and launch their own tokens effortlessly. This platform simplifies the process of token creation, fundraising, and distribution, making it accessible for everyone.
 
 ## Live Demo 🌐
-🔗 **[Visit TokenLaunchPad](https://token-launch-pad.vercel.app/)**
+🔗 **[Visit CryptoLift](https://token-launch-pad.vercel.app/)**
 
 ## Screenshots 📸
 ![Screenshot 1](https://github.com/user-attachments/assets/26b048fd-7012-41bd-a5e7-520c5a904d7b)  
@@ -27,8 +27,8 @@ To run the project locally, follow these steps:
 
 ```bash
 # Clone the repository
-git clone https://github.com/saurabhhh777/TokenLaunchPad.git
-cd TokenLaunchPad
+git clone https://github.com/saurabhhh777/CryptoLift.git
+cd CryptoLift
 
 # Install dependencies
 npm install
