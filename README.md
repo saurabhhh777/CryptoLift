@@ -6,9 +6,7 @@ CryptoLift is a decentralized platform that allows users to create, manage, and 
 🔗 **[Visit CryptoLift](https://token-launch-pad.vercel.app/)**
 
 ## Screenshots 📸
-![Screenshot 1](https://github.com/user-attachments/assets/26b048fd-7012-41bd-a5e7-520c5a904d7b)  
-![Screenshot 2](https://github.com/user-attachments/assets/3ec133aa-d456-49f9-b407-4eac1bee35fc)  
-![Screenshot 3](https://github.com/user-attachments/assets/e685533c-933e-4dab-80b6-908344f914fa)  
+<img width="1913" height="874" alt="Image" src="https://github.com/user-attachments/assets/9d526639-85fb-4850-80d3-3f84df03e15e" />
 
 ## Tech Stack 🛠
 - **Frontend:** React.js, Tailwind CSS  
