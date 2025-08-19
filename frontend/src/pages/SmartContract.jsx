@@ -81,13 +81,13 @@ const SmartContract = () => {
       }
 
       // Use deployed program state
-      const deployedState = {
-        authority: "FiULaF42tPHhrQwvbKUnpjHdXGytQPos7Sp3nVcikqGQ",
-        feeAmount: 0.01 * LAMPORTS_PER_SOL,
-        feeCollector: "FiULaF42tPHhrQwvbKUnpjHdXGytQPos7Sp3nVcikqGQ",
-        totalTokensCreated: 0,
-        totalFeesCollected: 0
-      };
+                  const deployedState = {
+              authority: "BmjhxsLSV4DxFLAJkXerWvyQHAAMptV8C5EhQ4cPbBEF",
+              feeAmount: 0.01 * LAMPORTS_PER_SOL,
+              feeCollector: "9exNXgVsUoWHgBXmcgbmxET91UzEZjf3jYW4761bjRgK",
+              totalTokensCreated: 0,
+              totalFeesCollected: 0
+            };
 
       setPlatformState(deployedState);
     } catch (error) {

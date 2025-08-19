@@ -27,7 +27,7 @@ const Tokenlaunchpad = () => {
   // Deployed program information
   const PROGRAM_ID = new PublicKey("HHBLrTyLRaSLhVUhJw75MMi1d4heggk6SWB77fJdouKT");
   const PLATFORM_STATE_PDA = new PublicKey("2SA1br9zQYN6JC3fZVDgDHStTC1rtz9G8hSCkh71WqZW");
-  const FEE_COLLECTOR = new PublicKey("FiULaF42tPHhrQwvbKUnpjHdXGytQPos7Sp3nVcikqGQ");
+  const FEE_COLLECTOR = new PublicKey("9exNXgVsUoWHgBXmcgbmxET91UzEZjf3jYW4761bjRgK");
   const FEE_AMOUNT = 0.01 * LAMPORTS_PER_SOL; // 0.01 SOL
 
   const [formdata, setFormdata] = useState({
