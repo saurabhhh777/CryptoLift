@@ -43,10 +43,22 @@ pub mod cryptolift {
             CryptoLiftError::InsufficientFee
         );
 
-        // Transfer fee to collector
+        // Transfer fee to collector using System Program
         let fee_amount = platform_state.fee_amount;
-        **ctx.accounts.fee_payment.try_borrow_mut_lamports()? -= fee_amount;
-        **ctx.accounts.fee_collector.try_borrow_mut_lamports()? += fee_amount;
+        let transfer_instruction = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.fee_payment.key(),
+            &ctx.accounts.fee_collector.key(),
+            fee_amount,
+        );
+        
+        anchor_lang::solana_program::program::invoke(
+            &transfer_instruction,
+            &[
+                ctx.accounts.fee_payment.to_account_info(),
+                ctx.accounts.fee_collector.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
 
         // Update platform statistics
         platform_state.total_tokens_created += 1;

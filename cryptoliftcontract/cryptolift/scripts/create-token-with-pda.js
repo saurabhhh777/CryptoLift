@@ -57,9 +57,12 @@ async function main() {
     const mintKeypair = Keypair.generate();
     console.log('Mint keypair:', mintKeypair.publicKey.toString());
     
-    // Create a temporary fee payment account owned by the program
-    const feePaymentKeypair = Keypair.generate();
-    console.log('Fee payment keypair:', feePaymentKeypair.publicKey.toString());
+    // Create a PDA for fee payment that the program can control
+    const [feePaymentPda] = PublicKey.findProgramAddressSync(
+        [stringToBuffer("fee_payment"), walletKeypair.publicKey.toBuffer()],
+        PROGRAM_ID
+    );
+    console.log('Fee payment PDA:', feePaymentPda.toString());
     
     // Get associated token account
     const { getAssociatedTokenAddress } = require('@solana/spl-token');
@@ -107,13 +110,13 @@ async function main() {
     // Create transaction
     const transaction = new Transaction();
 
-    // Add instruction to create fee payment account owned by System Program
+    // Add instruction to create fee payment PDA account
     const createFeeAccountInstruction = SystemProgram.createAccount({
         fromPubkey: walletKeypair.publicKey,
-        newAccountPubkey: feePaymentKeypair.publicKey,
+        newAccountPubkey: feePaymentPda,
         lamports: FEE_AMOUNT,
         space: 0, // No data needed
-        programId: SystemProgram.programId, // Owned by System Program
+        programId: PROGRAM_ID, // Owned by our program
     });
 
     transaction.add(createFeeAccountInstruction);
@@ -126,7 +129,7 @@ async function main() {
             { pubkey: associatedTokenAccount, isSigner: false, isWritable: true },
             { pubkey: tokenRecordPda, isSigner: false, isWritable: true },
             { pubkey: walletKeypair.publicKey, isSigner: true, isWritable: true },
-            { pubkey: feePaymentKeypair.publicKey, isSigner: false, isWritable: true }, // fee_payment
+            { pubkey: feePaymentPda, isSigner: false, isWritable: true }, // Use PDA
             { pubkey: FEE_COLLECTOR, isSigner: false, isWritable: true },
             { pubkey: new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"), isSigner: false, isWritable: false },
             { pubkey: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"), isSigner: false, isWritable: false },
@@ -155,7 +158,7 @@ async function main() {
     transaction.feePayer = walletKeypair.publicKey;
 
     // Sign the transaction
-    transaction.sign(mintKeypair, feePaymentKeypair);
+    transaction.sign(mintKeypair);
     
     // Simulate transaction
     try {
