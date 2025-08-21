@@ -22,12 +22,12 @@ pub mod cryptolift {
         platform_state.fee_collector = fee_collector;
         platform_state.total_tokens_created = 0;
         platform_state.total_fees_collected = 0;
-        
+
         msg!("CryptoLift platform initialized with fee: {} lamports", fee_amount);
         Ok(())
     }
 
-    /// Create a new token with fee payment
+    /// Create a new token and collect the fee from the creator (signer) via CPI to System Program
     pub fn create_token(
         ctx: Context<CreateToken>,
         token_name: String,
@@ -36,35 +36,44 @@ pub mod cryptolift {
         initial_supply: u64,
     ) -> Result<()> {
         let platform_state = &mut ctx.accounts.platform_state;
-        
-        // Verify fee payment
+
+        // --- Collect fee from the creator (must be signer) ---
+        let fee_amount = platform_state.fee_amount;
+
+        // Ensure creator has enough lamports (soft check; runtime would fail otherwise)
         require!(
-            ctx.accounts.fee_payment.lamports() >= platform_state.fee_amount,
+            ctx.accounts.creator.lamports() >= fee_amount,
             CryptoLiftError::InsufficientFee
         );
 
-        // Transfer fee to collector using System Program
-        let fee_amount = platform_state.fee_amount;
-        let transfer_instruction = anchor_lang::solana_program::system_instruction::transfer(
-            &ctx.accounts.fee_payment.key(),
+        let ix = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.creator.key(),
             &ctx.accounts.fee_collector.key(),
             fee_amount,
         );
-        
+
+        // CPI to SystemProgram.transfer. The creator is a signer in the outer transaction,
+        // so `is_signer` is true and CPI is allowed.
         anchor_lang::solana_program::program::invoke(
-            &transfer_instruction,
+            &ix,
             &[
-                ctx.accounts.fee_payment.to_account_info(),
+                ctx.accounts.creator.to_account_info(),
                 ctx.accounts.fee_collector.to_account_info(),
                 ctx.accounts.system_program.to_account_info(),
             ],
         )?;
 
         // Update platform statistics
-        platform_state.total_tokens_created += 1;
-        platform_state.total_fees_collected += fee_amount;
+        platform_state.total_tokens_created = platform_state
+            .total_tokens_created
+            .checked_add(1)
+            .ok_or(ErrorCode::from(ProgramError::InvalidArgument))?;
+        platform_state.total_fees_collected = platform_state
+            .total_fees_collected
+            .checked_add(fee_amount)
+            .ok_or(ErrorCode::from(ProgramError::InvalidArgument))?;
 
-        // Create token record
+        // Record token metadata
         let token_record = &mut ctx.accounts.token_record;
         token_record.creator = ctx.accounts.creator.key();
         token_record.mint = ctx.accounts.mint.key();
@@ -76,17 +85,14 @@ pub mod cryptolift {
 
         msg!("Token created successfully! Fee collected: {} lamports", fee_amount);
         msg!("Token: {} ({})", token_record.token_name, token_record.token_symbol);
-        
+
         Ok(())
     }
 
     /// Update platform fee (only authority can call)
-    pub fn update_fee(
-        ctx: Context<UpdateFee>,
-        new_fee_amount: u64,
-    ) -> Result<()> {
+    pub fn update_fee(ctx: Context<UpdateFee>, new_fee_amount: u64) -> Result<()> {
         let platform_state = &mut ctx.accounts.platform_state;
-        
+
         require!(
             ctx.accounts.authority.key() == platform_state.authority,
             CryptoLiftError::Unauthorized
@@ -94,7 +100,7 @@ pub mod cryptolift {
 
         platform_state.fee_amount = new_fee_amount;
         msg!("Platform fee updated to: {} lamports", new_fee_amount);
-        
+
         Ok(())
     }
 
@@ -104,7 +110,7 @@ pub mod cryptolift {
         new_fee_collector: Pubkey,
     ) -> Result<()> {
         let platform_state = &mut ctx.accounts.platform_state;
-        
+
         require!(
             ctx.accounts.authority.key() == platform_state.authority,
             CryptoLiftError::Unauthorized
@@ -112,17 +118,14 @@ pub mod cryptolift {
 
         platform_state.fee_collector = new_fee_collector;
         msg!("Fee collector updated to: {}", new_fee_collector);
-        
+
         Ok(())
     }
 
     /// Withdraw collected fees (only authority can call)
-    pub fn withdraw_fees(
-        ctx: Context<WithdrawFees>,
-        amount: u64,
-    ) -> Result<()> {
-        let platform_state = &mut ctx.accounts.platform_state;
-        
+    pub fn withdraw_fees(ctx: Context<WithdrawFees>, amount: u64) -> Result<()> {
+        let platform_state = &ctx.accounts.platform_state;
+
         require!(
             ctx.accounts.authority.key() == platform_state.authority,
             CryptoLiftError::Unauthorized
@@ -137,7 +140,7 @@ pub mod cryptolift {
         **ctx.accounts.authority.try_borrow_mut_lamports()? += amount;
 
         msg!("Withdrew {} lamports from fee collector", amount);
-        
+
         Ok(())
     }
 }
@@ -152,10 +155,10 @@ pub struct InitializePlatform<'info> {
         bump
     )]
     pub platform_state: Account<'info, PlatformState>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
 
@@ -169,7 +172,8 @@ pub struct CreateToken<'info> {
         has_one = fee_collector
     )]
     pub platform_state: Account<'info, PlatformState>,
-    
+
+    // Anchor will create this mint (payer = creator)
     #[account(
         init,
         payer = creator,
@@ -178,7 +182,8 @@ pub struct CreateToken<'info> {
         mint::freeze_authority = creator,
     )]
     pub mint: Account<'info, Mint>,
-    
+
+    // Anchor will derive & create the creator's ATA
     #[account(
         init,
         payer = creator,
@@ -186,7 +191,8 @@ pub struct CreateToken<'info> {
         associated_token::authority = creator,
     )]
     pub token_account: Account<'info, TokenAccount>,
-    
+
+    // Your on-chain record (PDA)
     #[account(
         init,
         payer = creator,
@@ -195,16 +201,14 @@ pub struct CreateToken<'info> {
         bump
     )]
     pub token_record: Account<'info, TokenRecord>,
-    
+
     #[account(mut)]
     pub creator: Signer<'info>,
-    
-    #[account(mut)]
-    pub fee_payment: SystemAccount<'info>,
-    
+
+    /// CHECK: receives lamports; owned by System Program
     #[account(mut)]
     pub fee_collector: SystemAccount<'info>,
-    
+
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
@@ -220,7 +224,7 @@ pub struct UpdateFee<'info> {
         has_one = authority
     )]
     pub platform_state: Account<'info, PlatformState>,
-    
+
     pub authority: Signer<'info>,
 }
 
@@ -233,7 +237,7 @@ pub struct UpdateFeeCollector<'info> {
         has_one = authority
     )]
     pub platform_state: Account<'info, PlatformState>,
-    
+
     pub authority: Signer<'info>,
 }
 
@@ -245,13 +249,13 @@ pub struct WithdrawFees<'info> {
         has_one = authority
     )]
     pub platform_state: Account<'info, PlatformState>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     #[account(mut)]
     pub fee_collector: SystemAccount<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
 
@@ -284,3 +288,4 @@ pub enum CryptoLiftError {
     #[msg("Insufficient funds")]
     InsufficientFunds,
 }
+    
