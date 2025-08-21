@@ -67,11 +67,11 @@ pub mod cryptolift {
         platform_state.total_tokens_created = platform_state
             .total_tokens_created
             .checked_add(1)
-            .ok_or(ErrorCode::from(ProgramError::InvalidArgument))?;
+            .ok_or(CryptoLiftError::InsufficientFee)?;
         platform_state.total_fees_collected = platform_state
             .total_fees_collected
             .checked_add(fee_amount)
-            .ok_or(ErrorCode::from(ProgramError::InvalidArgument))?;
+            .ok_or(CryptoLiftError::InsufficientFee)?;
 
         // Record token metadata
         let token_record = &mut ctx.accounts.token_record;
