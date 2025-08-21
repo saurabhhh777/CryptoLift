@@ -128,15 +128,6 @@ const Tokenlaunchpad = () => {
       // Create transaction
       const transaction = new Transaction();
 
-      // Add instruction to transfer fee from user to fee collector
-      const transferFeeInstruction = SystemProgram.transfer({
-        fromPubkey: wallet.publicKey,
-        toPubkey: FEE_COLLECTOR,
-        lamports: FEE_AMOUNT,
-      });
-
-      transaction.add(transferFeeInstruction);
-
       // Add create_token instruction (smart contract will handle mint and token account creation)
       const createTokenInstruction = {
         keys: [

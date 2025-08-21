@@ -105,14 +105,7 @@ async function main() {
     // Create transaction
     const transaction = new Transaction();
 
-    // Add instruction to transfer fee from user to fee collector
-    const transferFeeInstruction = SystemProgram.transfer({
-        fromPubkey: walletKeypair.publicKey,
-        toPubkey: FEE_COLLECTOR,
-        lamports: FEE_AMOUNT,
-    });
-
-    transaction.add(transferFeeInstruction);
+    // Smart contract will handle the fee transfer - no need to pre-transfer
 
     // Add create_token instruction
     const createTokenInstruction = {
