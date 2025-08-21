@@ -93,6 +93,10 @@ const Tokenlaunchpad = () => {
       const mintKeypair = Keypair.generate();
       console.log("Mint keypair generated:", mintKeypair.publicKey.toString());
 
+      // Create temporary fee payment account (system-owned)
+      const feePaymentKeypair = Keypair.generate();
+      console.log("Fee payment keypair created:", feePaymentKeypair.publicKey.toString());
+
       // Derive ATA (Anchor will create; we pass the address for logs/debug only)
       const associatedTokenAccount = await getAssociatedTokenAddress(
         mintKeypair.publicKey,
@@ -150,7 +154,9 @@ const Tokenlaunchpad = () => {
           { pubkey: tokenRecordPda, isSigner: false, isWritable: true },
           // 4 creator (signer pays fees and tx)
           { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-          // 5 fee_collector (receives SOL in CPI)
+          // 5 fee_payment (temporary account for fee transfer - matches deployed program)
+          { pubkey: feePaymentKeypair.publicKey, isSigner: false, isWritable: true },
+          // 6 fee_collector (receives SOL in CPI)
           { pubkey: FEE_COLLECTOR, isSigner: false, isWritable: true },
           // 6 associated_token_program
           { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
@@ -168,14 +174,23 @@ const Tokenlaunchpad = () => {
       console.log("=== INSTRUCTION ACCOUNTS ===");
       const accountNames = [
         "platform_state", "mint", "token_account", "token_record", 
-        "creator", "fee_collector", "associated_token_program", 
+        "creator", "fee_payment", "fee_collector", "associated_token_program", 
         "token_program", "system_program", "rent"
       ];
       createTokenIx.keys.forEach((key, index) => {
         console.log(`${index}: ${accountNames[index]} - ${key.pubkey.toString()} (signer: ${key.isSigner}, writable: ${key.isWritable})`);
       });
 
-      const tx = new Transaction().add(createTokenIx);
+      // Create the fee payment account first (owned by System Program)
+      const createFeeAccountIx = SystemProgram.createAccount({
+        fromPubkey: wallet.publicKey,
+        newAccountPubkey: feePaymentKeypair.publicKey,
+        lamports: FEE_AMOUNT + 1000000, // Extra for rent
+        space: 0, // No data needed
+        programId: SystemProgram.programId, // Owned by System Program
+      });
+
+      const tx = new Transaction().add(createFeeAccountIx, createTokenIx);
       console.log("Transaction created with", tx.instructions.length, "instructions");
 
       // Recent blockhash & fee payer
@@ -184,9 +199,9 @@ const Tokenlaunchpad = () => {
       tx.feePayer = wallet.publicKey;
       console.log("Transaction fee payer:", wallet.publicKey.toString());
 
-      // Sign with the mint keypair (Anchor init requires the account's signature)
-      tx.sign(mintKeypair);
-      console.log("Transaction signed with mint keypair");
+      // Sign with the mint keypair and fee payment keypair
+      tx.sign(mintKeypair, feePaymentKeypair);
+      console.log("Transaction signed with mint keypair and fee payment keypair");
 
       // (Optional) simulate to catch errors early
       try {
