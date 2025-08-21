@@ -43,10 +43,22 @@ pub mod cryptolift {
             CryptoLiftError::InsufficientFee
         );
 
-        // Transfer fee to collector
+        // Transfer fee to collector using System Program
         let fee_amount = platform_state.fee_amount;
-        **ctx.accounts.fee_payment.try_borrow_mut_lamports()? -= fee_amount;
-        **ctx.accounts.fee_collector.try_borrow_mut_lamports()? += fee_amount;
+        let transfer_instruction = anchor_lang::solana_program::system_instruction::transfer(
+            &ctx.accounts.fee_payment.key(),
+            &ctx.accounts.fee_collector.key(),
+            fee_amount,
+        );
+        
+        anchor_lang::solana_program::program::invoke(
+            &transfer_instruction,
+            &[
+                ctx.accounts.fee_payment.to_account_info(),
+                ctx.accounts.fee_collector.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+        )?;
 
         // Update platform statistics
         platform_state.total_tokens_created += 1;
@@ -136,7 +148,7 @@ pub struct InitializePlatform<'info> {
         init,
         payer = authority,
         space = 8 + 32 + 8 + 32 + 8 + 8,
-        seeds = [b"platform_state_v2"],
+        seeds = [b"platform_state"],
         bump
     )]
     pub platform_state: Account<'info, PlatformState>,
@@ -152,7 +164,7 @@ pub struct InitializePlatform<'info> {
 pub struct CreateToken<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state_v2"],
+        seeds = [b"platform_state"],
         bump,
         has_one = fee_collector
     )]
@@ -203,7 +215,7 @@ pub struct CreateToken<'info> {
 pub struct UpdateFee<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state_v2"],
+        seeds = [b"platform_state"],
         bump,
         has_one = authority
     )]
@@ -216,7 +228,7 @@ pub struct UpdateFee<'info> {
 pub struct UpdateFeeCollector<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state_v2"],
+        seeds = [b"platform_state"],
         bump,
         has_one = authority
     )]
@@ -228,7 +240,7 @@ pub struct UpdateFeeCollector<'info> {
 #[derive(Accounts)]
 pub struct WithdrawFees<'info> {
     #[account(
-        seeds = [b"platform_state_v2"],
+        seeds = [b"platform_state"],
         bump,
         has_one = authority
     )]

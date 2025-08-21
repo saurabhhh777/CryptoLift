@@ -81,10 +81,6 @@ const Tokenlaunchpad = () => {
       const mintKeypair = Keypair.generate();
       console.log("Mint keypair generated:", mintKeypair.publicKey.toString());
 
-      // Create fee payment account
-      const feePaymentKeypair = Keypair.generate();
-      console.log("Fee payment keypair generated:", feePaymentKeypair.publicKey.toString());
-
       // Get associated token account
       const associatedTokenAccount = await getAssociatedTokenAddress(
         mintKeypair.publicKey,
@@ -132,16 +128,14 @@ const Tokenlaunchpad = () => {
       // Create transaction
       const transaction = new Transaction();
 
-      // Add instruction to create fee payment account
-      const createFeeAccountInstruction = SystemProgram.createAccount({
+      // Add instruction to transfer fee from user to fee collector
+      const transferFeeInstruction = SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
-        newAccountPubkey: feePaymentKeypair.publicKey,
+        toPubkey: FEE_COLLECTOR,
         lamports: FEE_AMOUNT,
-        space: 0, // No data needed for fee account
-        programId: SystemProgram.programId,
       });
 
-      transaction.add(createFeeAccountInstruction);
+      transaction.add(transferFeeInstruction);
 
       // Add create_token instruction (smart contract will handle mint and token account creation)
       const createTokenInstruction = {
@@ -151,12 +145,12 @@ const Tokenlaunchpad = () => {
           { pubkey: associatedTokenAccount, isSigner: false, isWritable: true }, // token_account
           { pubkey: tokenRecordPda, isSigner: false, isWritable: true }, // token_record
           { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // creator
-          { pubkey: feePaymentKeypair.publicKey, isSigner: false, isWritable: true }, // fee_payment
+          { pubkey: wallet.publicKey, isSigner: false, isWritable: true }, // fee_payment (use user's wallet)
           { pubkey: FEE_COLLECTOR, isSigner: false, isWritable: true }, // fee_collector
           { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // associated_token_program
           { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false }, // token_program
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
-          { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false }, // rent
+          { pubkey: new PublicKey("SysvarRent111111111111111111111111111111111"), isSigner: false, isWritable: false }, // rent
         ],
         programId: PROGRAM_ID,
         data: instructionData,
@@ -181,9 +175,9 @@ const Tokenlaunchpad = () => {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = wallet.publicKey;
 
-      // Sign the transaction with the keypairs
-      transaction.sign(mintKeypair, feePaymentKeypair);
-      console.log("Transaction signed with mint and fee payment keypairs");
+      // Sign the transaction with the mint keypair
+      transaction.sign(mintKeypair);
+      console.log("Transaction signed with mint keypair");
 
       // Simulate transaction first to catch errors
       try {
