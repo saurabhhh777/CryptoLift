@@ -48,10 +48,16 @@ const Tokenlaunchpad = () => {
   };
 
   const createToken = async () => {
+    console.log("=== TOKEN CREATION STARTED ===");
+    console.log("Wallet connected:", wallet.connected);
+    console.log("Wallet public key:", wallet.publicKey?.toString());
+    
     if (!wallet.connected) {
       setStatus("Please connect your wallet first");
       return;
     }
+    
+    console.log("Form data:", formdata);
     if (
       !formdata.tokenname ||
       !formdata.symbol ||
@@ -68,9 +74,13 @@ const Tokenlaunchpad = () => {
     try {
       // Use a fresh connection (or the one from the adapter—either is fine)
       const conn = new Connection("https://api.devnet.solana.com", "confirmed");
+      console.log("Connection established");
 
       // Check balance roughly covers fee + tx
       const balance = await conn.getBalance(wallet.publicKey);
+      console.log("Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL");
+      console.log("Required balance:", (FEE_AMOUNT + 0.02 * LAMPORTS_PER_SOL) / LAMPORTS_PER_SOL, "SOL");
+      
       if (balance < FEE_AMOUNT + 0.02 * LAMPORTS_PER_SOL) {
         setStatus(
           "Insufficient balance. You need at least ~0.03 SOL for fee & tx costs."
@@ -81,6 +91,7 @@ const Tokenlaunchpad = () => {
 
       // Generate mint keypair (must sign the tx)
       const mintKeypair = Keypair.generate();
+      console.log("Mint keypair generated:", mintKeypair.publicKey.toString());
 
       // Derive ATA (Anchor will create; we pass the address for logs/debug only)
       const associatedTokenAccount = await getAssociatedTokenAddress(
@@ -90,12 +101,14 @@ const Tokenlaunchpad = () => {
         TOKEN_PROGRAM_ID,
         ASSOCIATED_TOKEN_PROGRAM_ID
       );
+      console.log("Associated token account:", associatedTokenAccount.toString());
 
       // Token record PDA (must match program seeds)
       const [tokenRecordPda] = PublicKey.findProgramAddressSync(
         [stringToBuffer("token_record"), mintKeypair.publicKey.toBuffer()],
         PROGRAM_ID
       );
+      console.log("Token record PDA:", tokenRecordPda.toString());
 
       // Serialize instruction data for Anchor:
       // [8-byte discriminator][name_len: u32][name bytes][sym_len: u32][sym bytes][decimals: u8][initial_supply: u64]
@@ -119,6 +132,9 @@ const Tokenlaunchpad = () => {
         ...decimalsBuf,
         ...initSupplyBuf,
       ]);
+      
+      console.log("Instruction data length:", data.length);
+      console.log("Instruction data (hex):", Buffer.from(data).toString('hex'));
 
       // Build the instruction to your program.
       // IMPORTANT: account order MUST match the Anchor Context<CreateToken> struct.
@@ -148,39 +164,61 @@ const Tokenlaunchpad = () => {
         programId: PROGRAM_ID,
         data,
       };
+      
+      console.log("=== INSTRUCTION ACCOUNTS ===");
+      const accountNames = [
+        "platform_state", "mint", "token_account", "token_record", 
+        "creator", "fee_collector", "associated_token_program", 
+        "token_program", "system_program", "rent"
+      ];
+      createTokenIx.keys.forEach((key, index) => {
+        console.log(`${index}: ${accountNames[index]} - ${key.pubkey.toString()} (signer: ${key.isSigner}, writable: ${key.isWritable})`);
+      });
 
       const tx = new Transaction().add(createTokenIx);
+      console.log("Transaction created with", tx.instructions.length, "instructions");
 
       // Recent blockhash & fee payer
       const { blockhash } = await conn.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
       tx.feePayer = wallet.publicKey;
+      console.log("Transaction fee payer:", wallet.publicKey.toString());
 
       // Sign with the mint keypair (Anchor init requires the account's signature)
       tx.sign(mintKeypair);
+      console.log("Transaction signed with mint keypair");
 
       // (Optional) simulate to catch errors early
       try {
+        console.log("=== SIMULATING TRANSACTION ===");
         const sim = await conn.simulateTransaction(tx);
+        console.log("Simulation result:", sim);
         if (sim.value.err) {
           console.error("Simulation error details:", sim.value.err);
+          console.error("Simulation logs:", sim.value.logs);
           throw new Error(`Transaction simulation failed: ${JSON.stringify(sim.value.err)}`);
         }
+        console.log("✅ Transaction simulation successful");
       } catch (e) {
-        console.error("Transaction simulation error:", e);
+        console.error("❌ Transaction simulation error:", e);
         throw e;
       }
 
+            console.log("=== SENDING TRANSACTION ===");
       setStatus("Sending transaction...");
       const sig = await wallet.sendTransaction(tx, conn, {
         skipPreflight: false,
         preflightCommitment: "confirmed",
       });
+      console.log("Transaction sent with signature:", sig);
 
       setStatus("Transaction sent! Waiting for confirmation...");
+      console.log("Waiting for confirmation...");
       const conf = await conn.confirmTransaction(sig, "confirmed");
-              if (conf.value.err) throw new Error(`Transaction failed: ${conf.value.err}`);
+      console.log("Confirmation result:", conf);
+      if (conf.value.err) throw new Error(`Transaction failed: ${conf.value.err}`);
 
+      console.log("✅ Token created successfully!");
       setStatus(
         `Token created successfully! Fee paid: ${FEE_AMOUNT / LAMPORTS_PER_SOL} SOL. Tx: ${sig}`
       );
@@ -193,11 +231,17 @@ const Tokenlaunchpad = () => {
         initialSupply: "",
         decimals: "6",
       });
-    } catch (error) {
-      console.error("Error creating token:", error);
-             setStatus("Error creating token: " + error.message);
+        } catch (error) {
+      console.error("❌ Error creating token:", error);
+      console.error("Error details:", {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
+      setStatus("Error creating token: " + error.message);
     } finally {
       setIsLoading(false);
+      console.log("=== TOKEN CREATION ENDED ===");
     }
   };
 
