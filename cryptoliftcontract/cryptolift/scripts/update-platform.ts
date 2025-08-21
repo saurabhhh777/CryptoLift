@@ -33,25 +33,20 @@ async function main() {
     
     console.log('Platform State PDA:', platformStatePda.toString());
     
-    // Create fee collector (using wallet as fee collector for now)
-    const feeCollector = walletKeypair.publicKey;
+    // Set correct fee amount
     const feeAmount = 10_000_000; // 0.01 SOL in lamports
     
-    // Create instruction data for initialize_platform
-    // Generate correct instruction discriminator
-    const initializePlatformDiscriminator = getInstructionDiscriminator('initialize_platform');
-    console.log('Initialize platform discriminator:', initializePlatformDiscriminator.toString('hex'));
+    // Create instruction data for update_fee
+    const updateFeeDiscriminator = getInstructionDiscriminator('update_fee');
+    console.log('Update fee discriminator:', updateFeeDiscriminator.toString('hex'));
     
-    // Serialize parameters: fee_amount (u64) + fee_collector (Pubkey)
+    // Serialize parameters: new_fee_amount (u64)
     const feeAmountBuffer = Buffer.alloc(8);
     feeAmountBuffer.writeBigUInt64LE(BigInt(feeAmount), 0);
     
-    const feeCollectorBuffer = feeCollector.toBuffer();
-    
     const instructionData = Buffer.concat([
-        initializePlatformDiscriminator,
-        feeAmountBuffer,
-        feeCollectorBuffer
+        updateFeeDiscriminator,
+        feeAmountBuffer
     ]);
     
     console.log('Instruction data length:', instructionData.length);
@@ -61,8 +56,7 @@ async function main() {
     const transaction = new Transaction().add({
         keys: [
             { pubkey: platformStatePda, isSigner: false, isWritable: true },
-            { pubkey: walletKeypair.publicKey, isSigner: true, isWritable: true },
-            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: walletKeypair.publicKey, isSigner: true, isWritable: false },
         ],
         programId: PROGRAM_ID,
         data: instructionData,
@@ -76,14 +70,12 @@ async function main() {
             { commitment: 'confirmed' }
         );
         
-        console.log('✅ Platform initialized successfully!');
+        console.log('✅ Platform fee updated successfully!');
         console.log('Transaction signature:', signature);
-        console.log('Platform State PDA:', platformStatePda.toString());
-        console.log('Fee Amount:', feeAmount / 1e9, 'SOL');
-        console.log('Fee Collector:', feeCollector.toString());
+        console.log('New Fee Amount:', feeAmount / 1e9, 'SOL');
         
     } catch (error: any) {
-        console.error('❌ Failed to initialize platform:', error);
+        console.error('❌ Failed to update platform fee:', error);
         if (error.transactionLogs) {
             console.error('Transaction logs:', error.transactionLogs);
         }

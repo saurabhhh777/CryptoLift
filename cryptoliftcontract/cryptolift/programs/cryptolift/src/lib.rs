@@ -136,7 +136,7 @@ pub struct InitializePlatform<'info> {
         init,
         payer = authority,
         space = 8 + 32 + 8 + 32 + 8 + 8,
-        seeds = [b"platform_state"],
+        seeds = [b"platform_state_v2"],
         bump
     )]
     pub platform_state: Account<'info, PlatformState>,
@@ -152,7 +152,7 @@ pub struct InitializePlatform<'info> {
 pub struct CreateToken<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state"],
+        seeds = [b"platform_state_v2"],
         bump,
         has_one = fee_collector
     )]
@@ -203,7 +203,7 @@ pub struct CreateToken<'info> {
 pub struct UpdateFee<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state"],
+        seeds = [b"platform_state_v2"],
         bump,
         has_one = authority
     )]
@@ -216,7 +216,7 @@ pub struct UpdateFee<'info> {
 pub struct UpdateFeeCollector<'info> {
     #[account(
         mut,
-        seeds = [b"platform_state"],
+        seeds = [b"platform_state_v2"],
         bump,
         has_one = authority
     )]
@@ -228,7 +228,7 @@ pub struct UpdateFeeCollector<'info> {
 #[derive(Accounts)]
 pub struct WithdrawFees<'info> {
     #[account(
-        seeds = [b"platform_state"],
+        seeds = [b"platform_state_v2"],
         bump,
         has_one = authority
     )]
