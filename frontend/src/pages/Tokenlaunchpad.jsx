@@ -26,8 +26,8 @@ const Tokenlaunchpad = () => {
 
   // Program config
   const PROGRAM_ID = new PublicKey("HHBLrTyLRaSLhVUhJw75MMi1d4heggk6SWB77fJdouKT");
+  // Use the platform state PDA that actually exists (with 'platform_state' seeds)
   const PLATFORM_STATE_PDA = new PublicKey("2SA1br9zQYN6JC3fZVDgDHStTC1rtz9G8hSCkh71WqZW");
-  const FEE_COLLECTOR = new PublicKey("FiULaF42tPHhrQwvbKUnpjHdXGytQPos7Sp3nVcikqGQ");
   const FEE_AMOUNT = 0.01 * LAMPORTS_PER_SOL; // 0.01 SOL
 
   const [formdata, setFormdata] = useState({
@@ -79,11 +79,11 @@ const Tokenlaunchpad = () => {
       // Check balance roughly covers fee + tx
       const balance = await conn.getBalance(wallet.publicKey);
       console.log("Wallet balance:", balance / LAMPORTS_PER_SOL, "SOL");
-      console.log("Required balance:", (FEE_AMOUNT + 0.02 * LAMPORTS_PER_SOL) / LAMPORTS_PER_SOL, "SOL");
+      console.log("Required balance:", (FEE_AMOUNT + 0.01 * LAMPORTS_PER_SOL) / LAMPORTS_PER_SOL, "SOL");
       
-      if (balance < FEE_AMOUNT + 0.02 * LAMPORTS_PER_SOL) {
+      if (balance < FEE_AMOUNT + 0.01 * LAMPORTS_PER_SOL) {
         setStatus(
-          "Insufficient balance. You need at least ~0.03 SOL for fee & tx costs."
+          "Insufficient balance. You need at least ~0.02 SOL for fee & tx costs."
         );
         setIsLoading(false);
         return;
@@ -93,9 +93,21 @@ const Tokenlaunchpad = () => {
       const mintKeypair = Keypair.generate();
       console.log("Mint keypair generated:", mintKeypair.publicKey.toString());
 
-      // Create temporary fee payment account (system-owned)
-      const feePaymentKeypair = Keypair.generate();
-      console.log("Fee payment keypair created:", feePaymentKeypair.publicKey.toString());
+      // Use the correct fee collector from platform state
+      const FEE_COLLECTOR = new PublicKey("FiULaF42tPHhrQwvbKUnpjHdXGytQPos7Sp3nVcikqGQ");
+      console.log("Fee collector:", FEE_COLLECTOR.toString());
+
+      // Derive platform state PDA (try both seeds to see which one works)
+      const [platformStatePdaV1] = PublicKey.findProgramAddressSync(
+        [stringToBuffer("platform_state")],
+        PROGRAM_ID
+      );
+      const [platformStatePdaV2] = PublicKey.findProgramAddressSync(
+        [stringToBuffer("platform_state_v2")],
+        PROGRAM_ID
+      );
+      console.log("Platform State PDA (v1):", platformStatePdaV1.toString());
+      console.log("Platform State PDA (v2):", platformStatePdaV2.toString());
 
       // Derive ATA (Anchor will create; we pass the address for logs/debug only)
       const associatedTokenAccount = await getAssociatedTokenAddress(
@@ -141,22 +153,20 @@ const Tokenlaunchpad = () => {
       console.log("Instruction data (hex):", Buffer.from(data).toString('hex'));
 
       // Build the instruction to your program.
-      // IMPORTANT: account order MUST match the Anchor Context<CreateToken> struct.
+      // IMPORTANT: account order MUST match the Anchor Context<CreateToken> struct exactly.
       const createTokenIx = {
         keys: [
-          // 0 platform_state
-          { pubkey: PLATFORM_STATE_PDA, isSigner: false, isWritable: true },
+          // 0 platform_state - try v1 first since we know it exists
+          { pubkey: platformStatePdaV1, isSigner: false, isWritable: true },
           // 1 mint (created by Anchor; must be signer for init)
-          { pubkey: mintKeypair.publicKey, isSigner: false, isWritable: true },
+          { pubkey: mintKeypair.publicKey, isSigner: true, isWritable: true },
           // 2 token_account (ATA created by Anchor)
           { pubkey: associatedTokenAccount, isSigner: false, isWritable: true },
           // 3 token_record (PDA)
           { pubkey: tokenRecordPda, isSigner: false, isWritable: true },
           // 4 creator (signer pays fees and tx)
           { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-          // 5 fee_payment (temporary account for fee transfer - matches deployed program)
-          { pubkey: feePaymentKeypair.publicKey, isSigner: false, isWritable: true },
-          // 6 fee_collector (receives SOL in CPI)
+          // 5 fee_collector (receives SOL in CPI)
           { pubkey: FEE_COLLECTOR, isSigner: false, isWritable: true },
           // 6 associated_token_program
           { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
@@ -174,23 +184,14 @@ const Tokenlaunchpad = () => {
       console.log("=== INSTRUCTION ACCOUNTS ===");
       const accountNames = [
         "platform_state", "mint", "token_account", "token_record", 
-        "creator", "fee_payment", "fee_collector", "associated_token_program", 
+        "creator", "fee_collector", "associated_token_program", 
         "token_program", "system_program", "rent"
       ];
       createTokenIx.keys.forEach((key, index) => {
         console.log(`${index}: ${accountNames[index]} - ${key.pubkey.toString()} (signer: ${key.isSigner}, writable: ${key.isWritable})`);
       });
 
-      // Create the fee payment account first (owned by System Program)
-      const createFeeAccountIx = SystemProgram.createAccount({
-        fromPubkey: wallet.publicKey,
-        newAccountPubkey: feePaymentKeypair.publicKey,
-        lamports: FEE_AMOUNT + 1000000, // Extra for rent
-        space: 0, // No data needed
-        programId: SystemProgram.programId, // Owned by System Program
-      });
-
-      const tx = new Transaction().add(createFeeAccountIx, createTokenIx);
+      const tx = new Transaction().add(createTokenIx);
       console.log("Transaction created with", tx.instructions.length, "instructions");
 
       // Recent blockhash & fee payer
@@ -199,9 +200,9 @@ const Tokenlaunchpad = () => {
       tx.feePayer = wallet.publicKey;
       console.log("Transaction fee payer:", wallet.publicKey.toString());
 
-      // Sign with the mint keypair and fee payment keypair
-      tx.sign(mintKeypair, feePaymentKeypair);
-      console.log("Transaction signed with mint keypair and fee payment keypair");
+      // Sign with mint keypair first
+      tx.sign(mintKeypair);
+      console.log("Transaction signed with mint keypair");
 
       // (Optional) simulate to catch errors early
       try {
@@ -219,11 +220,12 @@ const Tokenlaunchpad = () => {
         throw e;
       }
 
-            console.log("=== SENDING TRANSACTION ===");
+      console.log("=== SENDING TRANSACTION ===");
       setStatus("Sending transaction...");
       const sig = await wallet.sendTransaction(tx, conn, {
         skipPreflight: false,
         preflightCommitment: "confirmed",
+        signers: [mintKeypair], // Pass mint keypair as additional signer
       });
       console.log("Transaction sent with signature:", sig);
 
